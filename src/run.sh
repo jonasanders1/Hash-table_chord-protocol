@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Clean up any previous Flask processes
+for HOST in "${HOSTS[@]}"; do
+  echo "Killing previous Flask processes on $HOST"
+  ssh $HOST "pkill -f Node.py"  # Kills any process running Node.py on the host
+done
+
+
 # Check if the number of servers is provided
 if [ -z "$1" ]; then
   echo "Usage: $0 <number_of_servers>"

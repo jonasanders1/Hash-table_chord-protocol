@@ -1,3 +1,4 @@
+import requests
 import sys
 from flask import Flask, request, jsonify
 import hashlib
@@ -32,6 +33,14 @@ class Node:
     def add_known_nodes(self, nodes):
         """Add multiple nodes to the network."""
         self.known_nodes.extend(nodes)
+    
+    # Function to find the address based on the node hash
+    def get_address_for_node(self, node_hash):
+        for node in self.known_nodes:
+            if hash_function(node) == node_hash:
+                return node
+        return None
+        
         
     def get_responsible_nodes(self, key_hash):
         all_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
@@ -41,18 +50,38 @@ class Node:
                 return node_hash
         return all_nodes[0] # return the first node if the key_hash > all_nodes
 
-    def put(self, key, value):
-        """Store the key-value pair."""
-        key_hash = hash_function(key)
-        print(f"Storing: key_hash={key_hash}, value={value}")
-        self.data_store[key_hash] = value
-        return f"Stored key {key} at node {self.node_id}"
 
-    def get(self, key):
-        """Retrieve the value based on the hashed key."""
+    # Function to store the key-value pair based on consistent hashing
+    def put(self, key, value):
         key_hash = hash_function(key)
-        print(f"Retrieving: key_hash={key_hash}")
-        return self.data_store.get(key_hash, None)
+        responsible_node = self.get_responsible_nodes(key_hash)
+        
+        if responsible_node == self.node_id:
+            print(f"Storing locally: key_hash={key_hash}, value={value}")
+            self.data_store[key_hash] = value
+            return f"Stored key {key} at node {self.node_id}"
+        else: 
+            # store the key-value pair to the responsible node
+            responsible_node_address = self.get_address_for_node(responsible_node) 
+            print(f"Forwarding PUT request to {responsible_node_address} for key_hash={key_hash}")
+            response = requests.put(f'http://{responsible_node_address}/storage/{key}', data=value)
+            return response.json().get('message')
+
+
+    # Function to get the key-value pair with consistent hashing
+    def get(self, key):
+        key_hash = hash_function(key)
+        responsible_node = self.get_responsible_nodes(key_hash)
+        if responsible_node == self.node_id:
+            print(f"Retrieving locally: key_hash={key_hash}")
+            return self.data_store.get(key_hash, None)
+        else:
+            # retrieve the key-value pair from the responsible node
+            responsible_node_address = self.get_address_for_node(responsible_node)
+            print(f"Forwarding GET request to {responsible_node_address} for key_hash={key_hash}")
+            response = requests.get(f"http://{responsible_node_address}/storage/{key}")
+            return response.json().get('value', None)
+            
 
 
 # Initialize the node with a unique node ID and address
