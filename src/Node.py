@@ -17,6 +17,7 @@ class Node:
         self.data_store = {}
         self.finger_table = []
         self.known_nodes = []
+        self.predecessor = None # Predecessor node in the ring
 
     def add_node(self, node):
         """Add a node to the network."""
@@ -31,6 +32,14 @@ class Node:
     def add_known_nodes(self, nodes):
         """Add multiple nodes to the network."""
         self.known_nodes.extend(nodes)
+        
+    def get_responsible_nodes(self, key_hash):
+        all_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
+        
+        for node_hash in all_nodes:
+            if key_hash <= node_hash:
+                return node_hash
+        return all_nodes[0] # return the first node if the key_hash > all_nodes
 
     def put(self, key, value):
         """Store the key-value pair."""
