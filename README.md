@@ -48,10 +48,21 @@ List nodes by load
   - ---> [ "c6-6:27458", "c7-12:43456", "c11-5:56776" ]
   — ———> Success!
 
-## Terminal commands for Putting a value and Getting a value based on keys
+## Terminal commands for Putting a value and Getting a value based on keys (Locally with a single node)
 ### PUT 
 ```curl -X PUT -H "Content-Type: text/plain" -d 'my test value' http://127.0.0.1:3000/storage/mytestkey```
 ### GET 
 ```curl http://127.0.0.1:3000/storage/mytestkey```
+### GET Network
+```curl http://127.0.0.1:3000/network```
+
+## Terminal commands for Putting a value and Getting a value based on keys (with run.sh script)
+
+### Run the server
+```bash run.sh 3```
+### PUT 
+```curl -X PUT -H "Content-Type: text/plain" -d 'my test value' http://172.21.21.222:10468/storage/mytestkey```
+### GET 
+```curl  http://172.21.21.222:10468/storage/mytestkey```
 ### GET Network
 ```curl http://127.0.0.1:3000/network```

@@ -1,6 +1,7 @@
 import sys
 from flask import Flask, request, jsonify
 import hashlib
+import json
 
 # Flask application
 app = Flask(__name__)
@@ -20,10 +21,16 @@ class Node:
     def add_node(self, node):
         """Add a node to the network."""
         self.known_nodes.append(node)
+        # ? DEBUG: Output the nodes that were added
+        print(f"Known nodes updated: {self.known_nodes}")
 
     def get_known_nodes(self):
         """Return the list of known nodes."""
         return self.known_nodes
+
+    def add_known_nodes(self, nodes):
+        """Add multiple nodes to the network."""
+        self.known_nodes.extend(nodes)
 
     def put(self, key, value):
         """Store the key-value pair."""
@@ -52,6 +59,15 @@ if __name__ == "__main__":
     @app.route('/network', methods=['GET'])
     def get_network():
         return jsonify({'nodes': node1.get_known_nodes()}), 200
+
+    # API route to receive a list of known nodes
+    @app.route('/network', methods=['POST'])
+    def add_known_nodes():
+        nodes = request.get_json()
+        # ? DEBUG: Output the nodes received in the POST request
+        print(f"Received known nodes: {nodes}")
+        node1.add_known_nodes(nodes)
+        return jsonify({'message': 'Known nodes updated successfully'}), 200
 
     # API route for storing key-value pairs
     @app.route('/storage/<key>', methods=['PUT'])
