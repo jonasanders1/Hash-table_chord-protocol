@@ -1,0 +1,14 @@
+ * Serving Flask app 'Node'
+ * Debug mode: off
+[31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:10468
+ * Running on http://172.21.21.222:10468
+[33mPress CTRL+C to quit[0m
+172.21.21.1 - - [19/Sep/2024 11:06:44] "PUT /storage/mytestkey HTTP/1.1" 200 -
+172.21.21.1 - - [19/Sep/2024 11:07:18] "[33mPUT /sto HTTP/1.1[0m" 404 -
+172.21.21.1 - - [19/Sep/2024 11:07:27] "[33mPUT /strage/mytestkey HTTP/1.1[0m" 404 -
+172.21.21.1 - - [19/Sep/2024 11:09:32] "GET /storage/mytestkey HTTP/1.1" 200 -
+172.21.21.1 - - [19/Sep/2024 11:09:57] "GET /network HTTP/1.1" 200 -
+172.21.21.1 - - [19/Sep/2024 11:34:15] "[33mPUT /strage/mytestkey HTTP/1.1[0m" 404 -
+172.21.21.1 - - [19/Sep/2024 11:34:23] "GET /storage/mytestkey HTTP/1.1" 200 -
