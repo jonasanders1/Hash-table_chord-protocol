@@ -18,45 +18,30 @@ class Node:
         self.address = address
         self.data_store = {}
         self.finger_table = []
-        self.known_nodes = []
-        self.predecessor = None 
+        self.predecessor = None
         self.successor = None
 
-
-
-    def add_node(self, node):
-        """Add a node to the network."""
-        self.known_nodes.append(node)
-        print(f"Known nodes updated: {self.known_nodes}")
-
-    def get_known_nodes(self):
-        """Return the list of known nodes."""
-        return self.known_nodes
-
-    def add_known_nodes(self, nodes):
-        """Add multiple nodes to the network."""
-        self.known_nodes.extend(nodes)
-        self.update_successor_predecessor()
-    
     def get_address_for_node(self, node_hash):
-        """Find the address of a node by its hash."""
-        for node in self.known_nodes:
+        """Find the address of a node by its hash in the finger table."""
+        for node in self.finger_table:
             if hash_function(node) == node_hash:
                 return node
         return None
-        
-    def get_responsible_nodes(self, key_hash):
-        """Find the node responsible for a given key based on consistent hashing."""
-        all_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
-        for node_hash in all_nodes:
-            if key_hash <= node_hash:
-                return node_hash
-        return all_nodes[0]  # return the first node if key_hash > all_nodes
+
+    def find_successor(self, key_hash):
+        """Find the successor node for a given key hash."""
+        if self.predecessor is None or (self.predecessor < key_hash <= self.node_id):
+            return self.address
+        for node in self.finger_table:
+            node_hash = hash_function(node)
+            if self.node_id < node_hash >= key_hash:
+                return node
+        return self.successor
 
     def put(self, key, value):
-        """Store a key-value pair using consistent hashing."""
+        """Store a key-value pair using consistent hashing and finger table."""
         key_hash = hash_function(key)
-        responsible_node = self.get_responsible_nodes(key_hash)
+        responsible_node = self.find_successor(key_hash)
 
         if responsible_node == self.node_id:
             print(f"Storing locally: key_hash={key_hash}, value={value}")
@@ -80,7 +65,7 @@ class Node:
     def get(self, key):
         """Retrieve a key-value pair using consistent hashing."""
         key_hash = hash_function(key)
-        responsible_node = self.get_responsible_nodes(key_hash)
+        responsible_node = self.find_successor(key_hash)
         
         if responsible_node == self.node_id:
             print(f"Retrieving locally: key_hash={key_hash}")
@@ -100,37 +85,35 @@ class Node:
                 print(f"No valid responsible node address found for key_hash={key_hash}")
                 return None
 
-    def find_successor(self, key_hash):
-        """Find the successor node for a given key hash."""
-        # if the key is on our range, we are responsible
-        if self.predecessor is None or (self.predecessor < key_hash <= self.node_id):
-            return self.address
-        # otherwise, we look for the next node in the ring (successor)
-        for node in self.known_nodes:
-            node_hash = hash_function(node)
-            if self.node_id < node_hash >= key_hash:
-                return node
-            # if we dont find a successor , return the first node (wrap-around)
-            return self.successor
-        
     def update_successor_predecessor(self):
-        all_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
+        """Update successor and predecessor based on the finger table."""
+        all_nodes = sorted([hash_function(node) for node in self.finger_table] + [self.node_id])
         index = all_nodes.index(self.node_id)
-        
-        # update successor
-        if index < len(all_nodes) - 1:
-            self.successor = self.get_address_for_node(all_nodes[index + 1])
-        else:
-            self.successor = self.get_address_for_node(all_nodes[0])
+    
+        # Update successor
+        self.successor = all_nodes[(index + 1) % len(all_nodes)]
             
-        # update predecessor
-        if index > 0:
-            self.predecessor = self.get_address_for_node(all_nodes[index - 1])
-        else:
-            self.predecessor = self.get_address_for_node(all_nodes[-1])
+        # Update predecessor
+        self.predecessor = all_nodes[(index - 1) % len(all_nodes)]
             
-        # LOG
         print(f"Node {self.address}: Successor set to {self.successor}, Predecessor set to {self.predecessor}")
+
+    def update_finger_table(self):
+        """Populate or update the finger table."""
+        m = 160  # Number of bits in SHA-1
+        self.finger_table = []
+        for i in range(m):
+            start = (self.node_id + 2**i) % (2**m)
+            successor = self.find_successor(start)
+            self.finger_table.append(successor)
+        print(f"Finger table for node {self.address} populated: {self.finger_table}")
+
+    def find_closest_preceding_node(self, key_hash):
+        """Find the closest preceding node in the finger table."""
+        for node in reversed(self.finger_table):
+            if self.node_id < hash_function(node) < key_hash:
+                return node
+        return self.successor  # If no closer node, return the successor
 
 # Initialize the node with a unique node ID and address
 if __name__ == "__main__":
@@ -139,21 +122,24 @@ if __name__ == "__main__":
         sys.exit(1)
 
     port = int(sys.argv[1])  # Get the port number from the command-line argument
-    hostname = socket.gethostname()  # Get the actual hostname of the machine (e.g., c6-6)
+    hostname = socket.gethostname().split(".")[0]  # Get the short hostname
+    print(f"DEBUG: The hostname is {hostname}", flush=True)
     node1 = Node(node_id=hash_function(f"node-{port}"), address=f"{hostname}:{port}")
 
     # API route for getting the network
     @app.route('/network', methods=['GET'])
     def get_network():
-        return jsonify({'nodes': node1.get_known_nodes()}), 200
+        return jsonify({'nodes': node1.finger_table}), 200
 
     # API route to receive a list of known nodes
     @app.route('/network', methods=['POST'])
     def add_known_nodes():
         nodes = request.get_json()
         print(f"Received known nodes: {nodes}")
-        node1.add_known_nodes(nodes)
-        return jsonify({'message': 'Known nodes updated successfully'}), 200
+        node1.finger_table = nodes  # Replace the finger table with the new nodes
+        node1.update_successor_predecessor()
+        node1.update_finger_table()
+        return jsonify({'message': 'Finger table updated successfully'}), 200
 
     # API route for storing key-value pairs
     @app.route('/storage/<key>', methods=['PUT'])
@@ -176,15 +162,6 @@ if __name__ == "__main__":
     def helloworld():
         return node1.address, 200
 
-
-
-
-    # ! TESTING ENDPOINTS
-    @app.route('/stored_keys', methods=['GET'])
-    def get_stored_keys():
-        return jsonify({'keys': list(node1.data_store.keys())}), 200
-
-
     # API route to get the successor of a node
     @app.route('/successor', methods=['GET'])
     def get_successor():
@@ -195,5 +172,9 @@ if __name__ == "__main__":
     def get_predecessor():
         return jsonify({'predecessor': node1.predecessor}), 200
 
+    @app.route('/fingertable', methods=['GET'])
+    def get_finger_table():
+        return jsonify({'fingertable': node1.finger_table}), 200
+
     # Run the Flask server on the specified port
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)
