@@ -130,7 +130,6 @@ def get_predecessor():
 def get_finger_table():
     return jsonify({'fingertable': node1.finger_table}), 200
 
-
 if __name__ == '__main__':
     port = int(sys.argv[1])
     hostname = socket.gethostname().split('.')[0]  # Simplified hostname
