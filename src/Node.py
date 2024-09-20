@@ -3,6 +3,7 @@ import sys
 from flask import Flask, request, jsonify
 import hashlib
 import json
+import socket
 
 # Flask application
 app = Flask(__name__)
@@ -23,7 +24,6 @@ class Node:
     def add_node(self, node):
         """Add a node to the network."""
         self.known_nodes.append(node)
-        # ? DEBUG: Output the nodes that were added
         print(f"Known nodes updated: {self.known_nodes}")
 
     def get_known_nodes(self):
@@ -34,55 +34,67 @@ class Node:
         """Add multiple nodes to the network."""
         self.known_nodes.extend(nodes)
     
-    # Function to find the address based on the node hash
     def get_address_for_node(self, node_hash):
+        """Find the address of a node by its hash."""
         for node in self.known_nodes:
             if hash_function(node) == node_hash:
                 return node
         return None
         
-        
     def get_responsible_nodes(self, key_hash):
+        """Find the node responsible for a given key based on consistent hashing."""
         all_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
-        
         for node_hash in all_nodes:
             if key_hash <= node_hash:
                 return node_hash
-        return all_nodes[0] # return the first node if the key_hash > all_nodes
+        return all_nodes[0]  # return the first node if key_hash > all_nodes
 
-
-    # Function to store the key-value pair based on consistent hashing
     def put(self, key, value):
+        """Store a key-value pair using consistent hashing."""
         key_hash = hash_function(key)
         responsible_node = self.get_responsible_nodes(key_hash)
-        
+
         if responsible_node == self.node_id:
             print(f"Storing locally: key_hash={key_hash}, value={value}")
             self.data_store[key_hash] = value
             return f"Stored key {key} at node {self.node_id}"
-        else: 
-            # store the key-value pair to the responsible node
-            responsible_node_address = self.get_address_for_node(responsible_node) 
-            print(f"Forwarding PUT request to {responsible_node_address} for key_hash={key_hash}")
-            response = requests.put(f'http://{responsible_node_address}/storage/{key}', data=value)
-            return response.json().get('message')
+        else:
+            responsible_node_address = self.get_address_for_node(responsible_node)
+            if responsible_node_address:
+                print(f"Forwarding PUT request to {responsible_node_address} for key_hash={key_hash}")
+                try:
+                    response = requests.put(f'http://{responsible_node_address}/storage/{key}', data=value, timeout=5)
+                    response.raise_for_status()
+                    return response.json().get('message')
+                except requests.exceptions.RequestException as e:
+                    print(f"Error during PUT request to {responsible_node_address}: {e}")
+                    return "Error forwarding request"
+            else:
+                print(f"No valid responsible node address found for key_hash={key_hash}")
+                return "Error: No responsible node found"
 
-
-    # Function to get the key-value pair with consistent hashing
     def get(self, key):
+        """Retrieve a key-value pair using consistent hashing."""
         key_hash = hash_function(key)
         responsible_node = self.get_responsible_nodes(key_hash)
+        
         if responsible_node == self.node_id:
             print(f"Retrieving locally: key_hash={key_hash}")
             return self.data_store.get(key_hash, None)
         else:
-            # retrieve the key-value pair from the responsible node
             responsible_node_address = self.get_address_for_node(responsible_node)
-            print(f"Forwarding GET request to {responsible_node_address} for key_hash={key_hash}")
-            response = requests.get(f"http://{responsible_node_address}/storage/{key}")
-            return response.json().get('value', None)
-            
-
+            if responsible_node_address:
+                print(f"Forwarding GET request to {responsible_node_address} for key_hash={key_hash}")
+                try:
+                    response = requests.get(f"http://{responsible_node_address}/storage/{key}", timeout=5)
+                    response.raise_for_status()
+                    return response.json().get('value', None)
+                except requests.exceptions.RequestException as e:
+                    print(f"Error during GET request to {responsible_node_address}: {e}")
+                    return None
+            else:
+                print(f"No valid responsible node address found for key_hash={key_hash}")
+                return None
 
 # Initialize the node with a unique node ID and address
 if __name__ == "__main__":
@@ -91,7 +103,8 @@ if __name__ == "__main__":
         sys.exit(1)
 
     port = int(sys.argv[1])  # Get the port number from the command-line argument
-    node1 = Node(node_id=hash_function(f"node-{port}"), address=f"127.0.0.1:{port}")
+    hostname = socket.gethostname()  # Get the actual hostname of the machine (e.g., c6-6)
+    node1 = Node(node_id=hash_function(f"node-{port}"), address=f"{hostname}:{port}")
 
     # API route for getting the network
     @app.route('/network', methods=['GET'])
@@ -102,7 +115,6 @@ if __name__ == "__main__":
     @app.route('/network', methods=['POST'])
     def add_known_nodes():
         nodes = request.get_json()
-        # ? DEBUG: Output the nodes received in the POST request
         print(f"Received known nodes: {nodes}")
         node1.add_known_nodes(nodes)
         return jsonify({'message': 'Known nodes updated successfully'}), 200
@@ -122,6 +134,15 @@ if __name__ == "__main__":
             return jsonify({'value': value}), 200
         else:
             return jsonify({'error': 'Key not found'}), 404
+
+    # API route for helloworld test
+    @app.route('/helloworld', methods=['GET'])
+    def helloworld():
+        return node1.address, 200
+
+    @app.route('/stored_keys', methods=['GET'])
+    def get_stored_keys():
+        return jsonify({'keys': list(node1.data_store.keys())}), 200
 
     # Run the Flask server on the specified port
     app.run(host="0.0.0.0", port=port)
