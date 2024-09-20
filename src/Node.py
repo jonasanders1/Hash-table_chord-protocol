@@ -19,7 +19,10 @@ class Node:
         self.data_store = {}
         self.finger_table = []
         self.known_nodes = []
-        self.predecessor = None # Predecessor node in the ring
+        self.predecessor = None 
+        self.successor = None
+
+
 
     def add_node(self, node):
         """Add a node to the network."""
@@ -33,6 +36,7 @@ class Node:
     def add_known_nodes(self, nodes):
         """Add multiple nodes to the network."""
         self.known_nodes.extend(nodes)
+        self.update_successor_predecessor()
     
     def get_address_for_node(self, node_hash):
         """Find the address of a node by its hash."""
@@ -96,6 +100,38 @@ class Node:
                 print(f"No valid responsible node address found for key_hash={key_hash}")
                 return None
 
+    def find_successor(self, key_hash):
+        """Find the successor node for a given key hash."""
+        # if the key is on our range, we are responsible
+        if self.predecessor is None or (self.predecessor < key_hash <= self.node_id):
+            return self.address
+        # otherwise, we look for the next node in the ring (successor)
+        for node in self.known_nodes:
+            node_hash = hash_function(node)
+            if self.node_id < node_hash >= key_hash:
+                return node
+            # if we dont find a successor , return the first node (wrap-around)
+            return self.successor
+        
+    def update_successor_predecessor(self):
+        all_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
+        index = all_nodes.index(self.node_id)
+        
+        # update successor
+        if index < len(all_nodes) - 1:
+            self.successor = self.get_address_for_node(all_nodes[index + 1])
+        else:
+            self.successor = self.get_address_for_node(all_nodes[0])
+            
+        # update predecessor
+        if index > 0:
+            self.predecessor = self.get_address_for_node(all_nodes[index - 1])
+        else:
+            self.predecessor = self.get_address_for_node(all_nodes[-1])
+            
+        # LOG
+        print(f"Node {self.address}: Successor set to {self.successor}, Predecessor set to {self.predecessor}")
+
 # Initialize the node with a unique node ID and address
 if __name__ == "__main__":
     if len(sys.argv) != 2:
@@ -140,9 +176,24 @@ if __name__ == "__main__":
     def helloworld():
         return node1.address, 200
 
+
+
+
+    # ! TESTING ENDPOINTS
     @app.route('/stored_keys', methods=['GET'])
     def get_stored_keys():
         return jsonify({'keys': list(node1.data_store.keys())}), 200
+
+
+    # API route to get the successor of a node
+    @app.route('/successor', methods=['GET'])
+    def get_successor():
+        return jsonify({'successor': node1.successor}), 200
+
+    # API route to get the predecessor of a node
+    @app.route('/predecessor', methods=['GET'])
+    def get_predecessor():
+        return jsonify({'predecessor': node1.predecessor}), 200
 
     # Run the Flask server on the specified port
     app.run(host="0.0.0.0", port=port)
