@@ -3,6 +3,7 @@ import sys
 from flask import Flask, request, jsonify
 import hashlib
 import socket
+from flask import Response
 
 app = Flask(__name__)
 
@@ -20,45 +21,49 @@ class Node:
         self.known_nodes = []  # Initialize known nodes
 
     def update_successor_predecessor(self, node_list):
-        """ Update successor and predecessor based on node list """
-        self.known_nodes = node_list  # Update known nodes with new list
+        """Update successor and predecessor based on the sorted node list"""
+        self.known_nodes = node_list
         all_nodes = sorted([hash_function(node) for node in node_list] + [self.node_id])
         index = all_nodes.index(self.node_id)
 
-        # Successor is the next node in the sorted list
-        self.successor = node_list[(index + 1) % len(node_list)]
-        # Predecessor is the previous node in the sorted list
-        self.predecessor = node_list[(index - 1) % len(node_list)]
-        print(f"Updated node {self.address}: Successor: {self.successor}, Predecessor: {self.predecessor}")
+        # Set the successor to the next node, avoiding circular references
+        self.successor = node_list[(index + 1) % len(node_list)] if len(node_list) > 1 else self.address
+        # Set the predecessor to the previous node
+        self.predecessor = node_list[(index - 1) % len(node_list)] if len(node_list) > 1 else None
 
-        # Update finger table whenever the known nodes change
+        print(f"Updated node {self.address}: Successor: {self.successor}, Predecessor: {self.predecessor}", flush=True)
+        
+        # Update finger table after successor and predecessor are set
         self.update_finger_table()
+
 
     def update_finger_table(self):
         """Populate or update the finger table for faster lookups."""
         m = 160  # Number of bits in SHA-1
         self.finger_table = []
         
-        # Calculate finger table entries
+        # Calculate finger table entries based on the hash ring
         for i in range(m):
-            start = (self.node_id + 2**i) % (2**m)  # Find the start of each interval
-            successor = self.find_successor(start)  # Find the successor responsible for this interval
-            self.finger_table.append(successor)
+            start = (self.node_id + 2**i) % (2**m)
+            successor = self.find_successor(start)
+            if successor and successor not in self.finger_table:
+                self.finger_table.append(successor)
         
-        # LOG
-        print(f"Finger table for node {self.address} populated: {self.finger_table}")
+        print(f"Finger table for node {self.address} updated: {self.finger_table}", flush=True)
+
 
     def find_successor(self, key_hash):
         """Find the successor node for a given key hash."""
-        if not self.known_nodes:
-            return self.address  # Return self if no known nodes
-        
-        sorted_nodes = sorted([hash_function(node) for node in self.known_nodes] + [self.node_id])
-        for node_hash in sorted_nodes:
-            if key_hash <= node_hash:
-                return self.get_address_by_hash(node_hash)
-        
-        return self.get_address_by_hash(sorted_nodes[0])  # Wrap around
+        if self.predecessor is None or (hash_function(self.predecessor) < key_hash <= self.node_id):
+            return self.address
+        else:
+            for node in sorted(self.known_nodes, key=hash_function):
+                node_hash = hash_function(node)
+                if self.node_id < node_hash >= key_hash:
+                    return node
+            return self.successor if self.successor != self.address else None
+
+
 
     def get_address_by_hash(self, node_hash):
         """Helper function to get the address corresponding to a node hash."""
@@ -72,29 +77,55 @@ class Node:
     def put(self, key, value):
         """ Store a key-value pair """
         key_hash = hash_function(key)
-        if self.successor and key_hash > self.node_id and key_hash <= hash_function(self.successor):
-            # Store locally
-            self.data_store[key] = value
+        print(f"Storing key: {key}, hash: {key_hash} at node {self.address}", flush=True)
+
+        # Store locally if the key belongs to this node or its immediate successor
+        if self.successor == self.address or (self.predecessor is None) or (self.node_id < key_hash <= hash_function(self.successor)):
+            self.data_store[key_hash] = value
+            print(f"Data stored locally at {self.address} for key_hash: {key_hash}", flush=True)
             return "Stored locally"
-        else:
-            # Forward to successor
-            try:
+
+        # Forward the request to the successor if it's not this node
+        try:
+            if self.successor != self.address:  # Avoid infinite forwarding
+                print(f"Forwarding PUT request to {self.successor} for key {key}", flush=True)
                 response = requests.put(f"http://{self.successor}/storage/{key}", data=value)
                 return response.json().get('message')
-            except Exception as e:
-                return str(e)
+            else:
+                return "Error: Successor is the same as this node, stopping recursion."
+        except Exception as e:
+            print(f"Error forwarding to {self.successor}: {e}", flush=True)
+            return str(e)
+
+
 
     def get(self, key):
         """ Retrieve a key-value pair """
         key_hash = hash_function(key)
+        print(f"Retrieving key: {key}, hash: {key_hash} from node {self.address}", flush=True)
+
+        # Check if the key is stored locally
         if key_hash in self.data_store:
-            return self.data_store[key]
-        else:
-            try:
-                response = requests.get(f"http://{self.successor}/storage/{key}")
+            print(f"Found key {key} in node {self.address}", flush=True)
+            return self.data_store[key_hash]
+
+        # Forward the request to the successor if necessary
+        try:
+            if self.successor != self.address:  # Prevent forwarding to self
+                print(f"Forwarding GET request to {self.successor} for key {key}", flush=True)
+                response = requests.get(f"http://{self.successor}/storage/{key}", timeout=5)
+                response.raise_for_status()  # Handle non-2xx responses
                 return response.json().get('value')
-            except Exception as e:
+            else:
+                print(f"Stopping forwarding to {self.successor} to avoid recursion.", flush=True)
                 return None
+        except requests.exceptions.Timeout:
+            print(f"Request to {self.successor} timed out.", flush=True)
+            return None
+        except requests.exceptions.RequestException as e:
+            print(f"Error during GET request to {self.successor}: {e}", flush=True)
+            return None
+
 
 
 # Flask Routes
@@ -108,15 +139,15 @@ def network_update():
 def put_value(key):
     value = request.data.decode('utf-8')
     response = node1.put(key, value)
-    return jsonify({'message': response}), 200
+    return Response(response, content_type='text/plain'), 200
 
 @app.route('/storage/<key>', methods=['GET'])
 def get_value(key):
     value = node1.get(key)
     if value is not None:
-        return jsonify({'value': value}), 200
+        return Response(value, content_type='text/plain'), 200
     else:
-        return jsonify({'error': 'Key not found'}), 404
+        return Response("Key not found", content_type='text/plain'), 404
 
 @app.route('/successor', methods=['GET'])
 def get_successor():
@@ -129,6 +160,13 @@ def get_predecessor():
 @app.route('/fingertable', methods=['GET'])
 def get_finger_table():
     return jsonify({'fingertable': node1.finger_table}), 200
+
+
+
+# * Function for the run-tester.py script
+@app.route('/helloworld', methods=['GET'])
+def helloworld():
+    return node1.address, 200
 
 if __name__ == '__main__':
     port = int(sys.argv[1])
