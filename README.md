@@ -22,9 +22,9 @@ List nodes by load
 
 ## 1. Navigate to node and create project
   - List all nodes and navigate to an available node.
-    - ```ssh c11-10```
+    - ```ssh cXX-XX```
   - Verify which node im on:
-    - ```echo $HOSTNAMe —> c11-10.ifi.uit.no```
+    - ```echo $HOSTNAMe —> cXX-XX.ifi.uit.no```
   - Create a project directory
     - ```mkdir joand4770```
     - ```cd joand4770```
@@ -42,27 +42,22 @@ List nodes by load
   - ```curl http://ificluster.ifi.uit.no:44993```
 
 ## 4.Run run shell script
-  - ```./run.sh 3```
-  - --—> [ "c6-6:27458", "c7-12:43456", "c11-5:56776" ]
-  — ```python3 testscript.py '[ "c6-6:27458", "c7-12:43456", "c11-5:56776" ]'```
-  - ---> [ "c6-6:27458", "c7-12:43456", "c11-5:56776" ]
-  — ———> Success!
+  - ```bash run.sh 3```
+  - --—> Successfully updated c7-23:59064
+  - ---> [ "c6-5:6258", "c6-4:54341", "c11-0:15361", "c7-23:59064" ]
 
-## Terminal commands for Putting a value and Getting a value based on keys (Locally with a single node)
+## 5. Run ```run-tester.py```
+  — ```python run-tester.py '[ "c6-5:6258", "c6-4:54341", "c11-0:15361", "c7-23:59064" ]'```
+  received "c6-5:6258"
+  received "c6-4:54341"
+  received "c11-0:15361"
+  received "c7-23:59064"
+  Success!
+
+## Terminal commands for Putting a value and Getting a value based on keys
 ### PUT 
-```curl -X PUT -H "Content-Type: text/plain" -d 'my test value' http://127.0.0.1:3000/storage/mytestkey```
+```curl -X PUT -H "Content-Type: text/plain" -d 'value1' http://172.21.21.222:10468/storage/testkey1'```
 ### GET 
-```curl http://127.0.0.1:3000/storage/mytestkey```
+```curl  http://172.21.21.222:10468/storage/testkey1```
 ### GET Network
-```curl http://127.0.0.1:3000/network```
-
-## Terminal commands for Putting a value and Getting a value based on keys (with run.sh script)
-
-### Run the server
-```bash run.sh 3```
-### PUT 
-```curl -X PUT -H "Content-Type: text/plain" -d 'my test value' http://172.21.21.222:10468/storage/mytestkey```
-### GET 
-```curl  http://172.21.21.222:10468/storage/mytestkey```
-### GET Network
-```curl http://127.0.0.1:3000/network```
+```curl http://172.21.21.222:10468/network```
