@@ -24,7 +24,7 @@ class Node:
 
         # Log the current node's initialization
         print(f"Initializing node with address {self.address} and ID hash {self.node_id}", flush=True)
-
+    
     def update_successor_predecessor(self, node_list):
         """Update successor and predecessor based on the sorted node list."""
         self.known_nodes = node_list
@@ -53,10 +53,12 @@ class Node:
         self_hash = self.node_id
         print(f"Current node hash: {self_hash}", flush=True)
 
-        # If the current node's hash is not in the list, raise an error
-        if self_hash not in sorted_node_hashes:
-            print(f"Error: Node hash {self_hash} not found in sorted list: {sorted_node_hashes}", flush=True)
-            raise ValueError(f"Current node hash {self_hash} is not in the sorted node list: {sorted_node_hashes}")
+        # Single node case: point successor and predecessor to itself
+        if len(self.known_nodes) == 1:
+            self.successor = self.address
+            self.predecessor = self.address
+            print(f"Single-node case: Successor and Predecessor set to {self.address}", flush=True)
+            return
 
         # Find the position of the current node in the sorted list
         index = sorted_node_hashes.index(self_hash)
@@ -79,6 +81,10 @@ class Node:
 
         # Update the finger table after setting successor and predecessor
         self.update_finger_table()
+
+
+
+
 
     def get_address_by_hash(self, node_hash):
         """Helper function to get the address corresponding to a node hash."""
@@ -127,9 +133,10 @@ class Node:
             print(f"Data stored locally at {self.address} for key_hash: {key_hash}", flush=True)
             return "Stored locally"
 
-        # Prevent the redundant forwarding: Stop forwarding if the successor is already the current node
+        # Single node case
         if self.successor == self.address:
             print(f"Stopping recursion at {self.address}. No further forwarding needed.", flush=True)
+            self.data_store[key_hash] = value
             return "Error: Successor is the same as this node, stopping recursion."
 
         try:
@@ -152,15 +159,17 @@ class Node:
             print(f"Found key {key} in node {self.address}", flush=True)
             return self.data_store[key_hash]
         
+        # Single node case: return None if not found locally
+        if self.successor == self.address:
+            print(f"Stopping forwarding to {self.successor} in single-node case.", flush=True)
+            return None
+        
+        
         try:
-            if self.successor != self.address:
-                print(f"Forwarding GET request to {self.successor} for key {key}", flush=True)
-                response = requests.get(f"http://{self.successor}/storage/{key}", timeout=5)
-                response.raise_for_status()
-                return response.text  # Use response.text for plain text response
-            else:
-                print(f"Stopping forwarding to {self.successor} to avoid recursion.", flush=True)
-                return None
+            print(f"Forwarding GET request to {self.successor} for key {key}", flush=True)
+            response = requests.get(f"http://{self.successor}/storage/{key}", timeout=5)
+            response.raise_for_status()
+            return response.text  # Use response.text for plain text response
         except requests.exceptions.Timeout:
             print(f"Request to {self.successor} timed out.", flush=True)
             return None
