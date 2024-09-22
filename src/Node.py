@@ -167,60 +167,6 @@ class Node:
             print(f"Error during GET request to {self.successor}: {e}", flush=True)
             return None
     
-    # def put(self, key, value):
-    #     key_hash = hash_function(key)
-    #     print(f"Storing key: {key}, hash: {key_hash} at node {self.address}", flush=True)
-        
-    #     # Single-node case
-    #     if self.successor == self.address and self.predecessor == self.address:
-    #         self.data_store[key_hash] = value
-    #         print(f"Data stored locally at {self.address} for key_hash: {key_hash} (single node)", flush=True)
-    #         return "Stored locally (single node)"
-        
-    #     # Multi-node case
-    #     if self.successor == self.address or (self.predecessor is None) or (self.node_id < key_hash <= hash_function(self.successor)):
-    #         self.data_store[key_hash] = value
-    #         print(f"Data stored locally at {self.address} for key_hash: {key_hash}", flush=True)
-    #         return "Stored locally"
-        
-    #     try:
-    #         print(f"Forwarding PUT request to {self.successor} for key {key}", flush=True)
-    #         response = requests.put(f"http://{self.successor}/storage/{key}", data=value)
-    #         print(f"Response from successor {self.successor}: {response.text}", flush=True)
-    #         return response.text
-    #     except Exception as e:
-    #         print(f"Error forwarding to {self.successor}: {e}", flush=True)
-    #         return str(e)
-
-    # def get(self, key):
-    #     key_hash = hash_function(key)
-    #     print(f"Retrieving key: {key}, hash: {key_hash} from node {self.address}", flush=True)
-
-    #     # Single-node case
-    #     if self.successor == self.address and self.predecessor == self.address:
-    #         if key_hash in self.data_store:
-    #             print(f"Found key {key} in node {self.address} (single node)", flush=True)
-    #             return self.data_store[key_hash]
-    #         else:
-    #             print(f"Key {key} not found in single-node network", flush=True)
-    #             return None
-
-    #     # Multi-node case
-    #     if key_hash in self.data_store:
-    #         print(f"Found key {key} in node {self.address}", flush=True)
-    #         return self.data_store[key_hash]
-        
-    #     try:
-    #         print(f"Forwarding GET request to {self.successor} for key {key}", flush=True)
-    #         response = requests.get(f"http://{self.successor}/storage/{key}", timeout=5)
-    #         response.raise_for_status()
-    #         return response.text
-    #     except requests.exceptions.Timeout:
-    #         print(f"Request to {self.successor} timed out.", flush=True)
-    #         return None
-    #     except requests.exceptions.RequestException as e:
-    #         print(f"Error during GET request to {self.successor}: {e}", flush=True)
-    #         return None
 
 
 # Flask Routes
