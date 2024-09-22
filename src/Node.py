@@ -151,6 +151,7 @@ class Node:
         if key_hash in self.data_store:
             print(f"Found key {key} in node {self.address}", flush=True)
             return self.data_store[key_hash]
+        
         try:
             if self.successor != self.address:
                 print(f"Forwarding GET request to {self.successor} for key {key}", flush=True)
