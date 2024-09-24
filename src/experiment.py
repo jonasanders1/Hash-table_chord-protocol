@@ -1,9 +1,8 @@
 import time
 import requests
-import random
-import string
 import sys
 import matplotlib.pyplot as plt
+import statistics
 
 
 def perform_put_requests(node_address, num_operations):
@@ -67,37 +66,30 @@ def run_experiment(node_addresses, num_operations):
 
     return avg_put_time, avg_get_time
 
-def plot_results(node_counts, put_times, get_times):
-    """Plots the elapsed time for PUT and GET operations vs. the number of nodes."""
-  
-
-if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python experiment.py <node1> <node2> ...")
-        sys.exit(1)
-
-    node_addresses = sys.argv[1:-1]
-    num_operations = 100
-
-    print(f"Running experiment with nodes: {node_addresses} and {num_operations} operations.")
-
-    # Run the experiment x number of nodes (1, 2, 4, 8 or 16)
-    node_counts = [1, 2, 4, 8, 16]
-    
-    # initializing PUT and GET times
+def run_trials(node_addresses, num_operations, num_trials):
+    """
+    Run the experiment multiple times to calculate mean and standard deviation.
+    """
     put_times = []
     get_times = []
 
-    for node_count in node_counts:
-        print(f"Testing with {node_count} node(s)...")
-        selected_nodes = node_addresses[:node_count]  # Select the number of nodes
-        put_time, get_time = run_experiment(selected_nodes, num_operations)
+    for _ in range(num_trials):
+        put_time, get_time = run_experiment(node_addresses, num_operations)
         put_times.append(put_time)
         get_times.append(get_time)
 
-    # Plotting the results with Matplotlib 
-    plt.plot(node_counts, put_times, 'r-o', label='PUT Time (s)')
-    plt.plot(node_counts, get_times, 'b-o', label='GET Time (s)')
+    # Calculate mean and standard deviation
+    mean_put_time = statistics.mean(put_times)
+    mean_get_time = statistics.mean(get_times)
+    stdev_put_time = statistics.stdev(put_times)
+    stdev_get_time = statistics.stdev(get_times)
+
+    return mean_put_time, mean_get_time, stdev_put_time, stdev_get_time
+
+def plot_results(node_counts, put_times, get_times, put_stdevs, get_stdevs):
+    """Plots the elapsed time for PUT and GET operations vs. the number of nodes with error bars."""
+    plt.errorbar(node_counts, put_times, yerr=put_stdevs, fmt='r-o', label='PUT Time (s)', capsize=5)
+    plt.errorbar(node_counts, get_times, yerr=get_stdevs, fmt='b-o', label='GET Time (s)', capsize=5)
     plt.xlabel("Number of Nodes")
     plt.ylabel("Time (seconds)")
     plt.title("PUT/GET Time vs. Number of Nodes")
@@ -106,3 +98,36 @@ if __name__ == "__main__":
     plt.savefig("time_vs_nodes_plot.png")
     plt.show()
     print("Plot saved as time_vs_nodes_plot.png")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python experiment.py <node1> <node2> ...")
+        sys.exit(1)
+
+    node_addresses = sys.argv[1:-1]
+    num_operations = 200
+    num_trials = 3  # Run 3 trials for each node count to calculate standard deviation
+
+    print(f"Running experiment with nodes: {node_addresses} and {num_operations} operations.")
+
+    # Run the experiment for x number of nodes (1, 2, 4, 8, 16)
+    node_counts = [1, 2, 4, 8, 16]
+    
+    # Initializing PUT and GET times and standard deviations
+    put_times = []
+    get_times = []
+    put_stdevs = []
+    get_stdevs = []
+
+    for node_count in node_counts:
+        print(f"Testing with {node_count} node(s)...")
+        selected_nodes = node_addresses[:node_count]  # Select the number of nodes
+        mean_put_time, mean_get_time, stdev_put_time, stdev_get_time = run_trials(selected_nodes, num_operations, num_trials)
+        put_times.append(mean_put_time)
+        get_times.append(mean_get_time)
+        put_stdevs.append(stdev_put_time)
+        get_stdevs.append(stdev_get_time)
+
+    # Plotting the results with Matplotlib, including error bars
+    plot_results(node_counts, put_times, get_times, put_stdevs, get_stdevs)
