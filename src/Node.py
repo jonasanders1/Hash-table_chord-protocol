@@ -6,16 +6,16 @@ import socket
 
 app = Flask(__name__)
 
-# Hash function
+# hash function
 def hash_value(value):
     print(f"Hashing value: {value}", flush=True)
     return int(hashlib.sha1(value.encode()).hexdigest(), 16)
 
 
-# Represents a node in the DHT
+# represents a node in the DHT
 class Node:
     
-    # Initializing a node
+    # initializing a node
     def __init__(self, address):
         self.node_id = hash_value(address)
         self.address = address
@@ -25,25 +25,25 @@ class Node:
         self.finger_table = []
         self.node_hashes = {}
         
-        # Log the current node's initialization
+        # log the current node's initialization
         print(f"Initializing node with address {self.address} and ID hash {self.node_id}", flush=True)
 
     def update_successor_predecessor(self, node_list):
         """Update successor and predecessor based on the sorted node list, then drop the node list."""
         
-        # Cache node hashes to avoid redundant hashing
+        # cache node hashes to avoid redundant hashing
         for node in node_list:
             if node not in self.node_hashes:
                 self.node_hashes[node] = hash_value(node)
                 print(f"Hashed and added node {node} with hash {self.node_hashes[node]}", flush=True)
 
-        # Ensure the current node's address is part of the known nodes
+        # ensure the current node's address is part of the known nodes
         if self.address not in node_list:
             print(f"Adding current node {self.address} to the known nodes list.", flush=True)
             node_list.append(self.address)
             self.node_hashes[self.address] = self.node_id
 
-        # Sort based on hash values and update successor/predecessor
+        # sort based on hash values and update successor/predecessor
         sorted_nodes = sorted(node_list, key=lambda node: hash_value(node))
         self_hash = self.node_id
 
@@ -51,13 +51,13 @@ class Node:
         self.successor = sorted_nodes[(index + 1) % len(sorted_nodes)]
         self.predecessor = sorted_nodes[(index - 1) % len(sorted_nodes)]
 
-        # After setting successor and predecessor, drop the full node list
+        # after setting successor and predecessor, drop the full node list
         print(f"Dropping known nodes list after setting up the ring.", flush=True)
 
-        # Update finger table after setting successor and predecessor
+        # update finger table after setting successor and predecessor
         self.update_finger_table()
 
-        # Clear known_nodes to ensure it's not used after the setup
+        # clear known_nodes to make sure it is not used after the setup
         self.node_hashes = {}
 
     def get_address_by_hash(self, node_hash):
@@ -70,11 +70,11 @@ class Node:
 
     def update_finger_table(self):
         """Updates the finger table for a node."""
-        m = 160  # Number of finger entries due to SHA-1 hashing
+        m = 160  # number of finger entries due to SHA-1 hashing
         
         self.finger_table = []
         
-        # Populate the finger table
+        # populate the finger table
         for i in range(m):
             start = (self.node_id + 2**i) % (2**m)
             successor = self.find_successor(start)
@@ -93,14 +93,14 @@ class Node:
             return self.address
 
         # Use finger table to find the closest node to the key
-        closest_preceding_node = self.closest_preceding_node(key_hash)
-        if closest_preceding_node:
-            return closest_preceding_node
+        find_closest_node = self.find_closest_node(key_hash)
+        if find_closest_node:
+            return find_closest_node
 
         # Fallback to successor if no closer node is found
         return self.successor if self.successor != self.address else None
 
-    def closest_preceding_node(self, key_hash):
+    def find_closest_node(self, key_hash):
         """ Find the closest preceding node in the finger table for a given key hash. """
         for i in reversed(range(len(self.finger_table))):
             finger_node_hash = hash_value(self.finger_table[i])
@@ -123,7 +123,7 @@ class Node:
             return "Stored locally"
 
         # Find the closest preceding node using the finger table
-        closest_node = self.closest_preceding_node(key_hash)
+        closest_node = self.find_closest_node(key_hash)
 
         # If the closest node is this node itself, store locally
         if closest_node == self.address:
@@ -155,7 +155,7 @@ class Node:
             return self.data_store[key_hash]
 
         # Find the closest preceding node using the finger table
-        closest_node = self.closest_preceding_node(key_hash)
+        closest_node = self.find_closest_node(key_hash)
 
         # If the closest node is this node itself, the key isn't found locally
         if closest_node == self.address:
@@ -166,6 +166,9 @@ class Node:
             # Forward the GET request to the closest node found
             print(f"Forwarding GET request to {closest_node} for key {key}", flush=True)
             response = requests.get(f"http://{closest_node}/storage/{key}", timeout=5)
+            # print(f"Forwarding GET request to {closest_node} for key {key} With flask", flush=True)
+            # response = get_value()
+            
             response.raise_for_status()
             return response.text
         except requests.exceptions.Timeout:
@@ -204,6 +207,7 @@ def get_value(key):
         return Response(value, content_type='text/plain'), 200
     else:
         return Response("Key not found", content_type='text/plain'), 404
+
 
 
 # ! Helper endpoints

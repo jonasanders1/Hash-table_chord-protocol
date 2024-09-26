@@ -39,6 +39,7 @@ def perform_get_requests(node_address, keys):
     return elapsed_time
 
 def run_experiment(node_addresses, num_operations):
+    
     # initialize PUT and GET times
     total_put_time = 0
     total_get_time = 0
@@ -78,7 +79,7 @@ def run_trials(node_addresses, num_operations, num_trials):
         put_times.append(put_time)
         get_times.append(get_time)
 
-    # Calculate mean and standard deviation
+    # calculatin the mean and standard deviation
     mean_put_time = statistics.mean(put_times)
     mean_get_time = statistics.mean(get_times)
     stdev_put_time = statistics.stdev(put_times)
@@ -129,5 +130,5 @@ if __name__ == "__main__":
         put_stdevs.append(stdev_put_time)
         get_stdevs.append(stdev_get_time)
 
-    # Plotting the results with Matplotlib, including error bars
+    # potting the results with Matplotlib with including error bars
     plot_results(node_counts, put_times, get_times, put_stdevs, get_stdevs)
