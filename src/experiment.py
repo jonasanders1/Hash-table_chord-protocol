@@ -106,7 +106,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     node_addresses = sys.argv[1:-1]
-    num_operations = 200
+    num_operations = 10
     num_trials = 3  # Run 3 trials for each node count to calculate standard deviation
 
     print(f"Running experiment with nodes: {node_addresses} and {num_operations} operations.")

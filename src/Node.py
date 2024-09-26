@@ -6,11 +6,9 @@ import socket
 
 app = Flask(__name__)
 
-
 # Hash function
 def hash_value(value):
     print(f"Hashing value: {value}", flush=True)
-    # using SHA-1 hashing to assign a unique ID to each node or value 
     return int(hashlib.sha1(value.encode()).hexdigest(), 16)
 
 
@@ -25,109 +23,90 @@ class Node:
         self.predecessor = None
         self.data_store = {}
         self.finger_table = []
-        self.known_nodes = [] 
         self.node_hashes = {}
         
         # Log the current node's initialization
         print(f"Initializing node with address {self.address} and ID hash {self.node_id}", flush=True)
-    
-    
-    # Responsible for updating the nodes successor and predecessor
+
     def update_successor_predecessor(self, node_list):
+        """Update successor and predecessor based on the sorted node list, then drop the node list."""
         
-        self.known_nodes = node_list
         # Cache node hashes to avoid redundant hashing
-        for node in self.known_nodes:
+        for node in node_list:
             if node not in self.node_hashes:
                 self.node_hashes[node] = hash_value(node)
+                print(f"Hashed and added node {node} with hash {self.node_hashes[node]}", flush=True)
 
-        # Check to make sure that the current node`s address is part of the known nodes
-        if self.address not in self.known_nodes:
+        # Ensure the current node's address is part of the known nodes
+        if self.address not in node_list:
             print(f"Adding current node {self.address} to the known nodes list.", flush=True)
-            self.known_nodes.append(self.address)
+            node_list.append(self.address)
             self.node_hashes[self.address] = self.node_id
 
-        # Sort all nodes based on their hash values
-        sorted_node_hashes = sorted(self.node_hashes.values())
-        # Find the hash of the current node
+        # Sort based on hash values and update successor/predecessor
+        sorted_nodes = sorted(node_list, key=lambda node: hash_value(node))
         self_hash = self.node_id
 
-        # Single node case: assign successor and predecessor to its own address
-        if len(self.known_nodes) == 1:
-            self.successor = self.address
-            self.predecessor = self.address
-            print(f"Single-node case: Successor and Predecessor set to {self.address}", flush=True)
-            return
+        index = sorted_nodes.index(self.address)
+        self.successor = sorted_nodes[(index + 1) % len(sorted_nodes)]
+        self.predecessor = sorted_nodes[(index - 1) % len(sorted_nodes)]
 
-        # Find the position of the current node in the sorted list
-        index = sorted_node_hashes.index(self_hash)
+        # After setting successor and predecessor, drop the full node list
+        print(f"Dropping known nodes list after setting up the ring.", flush=True)
 
-        # Assign successor and predecessor indexes
-        successor_index = (index + 1) % len(sorted_node_hashes)
-        predecessor_index = (index - 1) % len(sorted_node_hashes)
-
-        # Assign successor and predecessor based on the indexes
-        self.successor = self.get_address_by_hash(sorted_node_hashes[successor_index])
-        self.predecessor = self.get_address_by_hash(sorted_node_hashes[predecessor_index])
-
-        # Cache predecessor and successor hashes if missing
-        if self.successor not in self.node_hashes:
-            self.node_hashes[self.successor] = hash_value(self.successor)
-
-        if self.predecessor not in self.node_hashes:
-            self.node_hashes[self.predecessor] = hash_value(self.predecessor)
-
-        print(f"Updated node {self.address}: Successor: {self.successor}, Predecessor: {self.predecessor}", flush=True)
-
-        # Update the finger table after setting successor and predecessor
+        # Update finger table after setting successor and predecessor
         self.update_finger_table()
 
-
-
-
+        # Clear known_nodes to ensure it's not used after the setup
+        self.node_hashes = {}
 
     def get_address_by_hash(self, node_hash):
+        """Helper function to get the address corresponding to a node hash."""
         for node, hashed_value in self.node_hashes.items():
             if hashed_value == node_hash:
                 return node
         return None
 
 
-    # function to update the finger table for a node
     def update_finger_table(self):
-        m = 160 # 160 entries because of SHA-1 hashing
+        """Updates the finger table for a node."""
+        m = 160  # Number of finger entries due to SHA-1 hashing
         
         self.finger_table = []
         
-        # populating the finger table 
-        # looping over all the possible entries
+        # Populate the finger table
         for i in range(m):
             start = (self.node_id + 2**i) % (2**m)
             successor = self.find_successor(start)
             
-            # if valid sucessor found and it`s not in the finger table --> append it
             if successor and successor not in self.finger_table:
                 self.finger_table.append(successor)
         print(f"Finger table for node {self.address} updated: {self.finger_table}", flush=True)
 
-    # Function to find the nodes successor based on a key`s hash
     def find_successor(self, key_hash):
-        # check that predecessor hash exists
+        """Find the successor of the given key hash using finger table and neighbors."""
         if self.predecessor and self.predecessor not in self.node_hashes:
             self.node_hashes[self.predecessor] = hash_value(self.predecessor)
-        
-        #  Single node case check
-        #  if so --> assign to itself
+
+        # If the key is between this node and its successor, return the successor
         if self.predecessor is None or (self.node_hashes[self.predecessor] < key_hash <= self.node_id):
             return self.address
-        else:
-            # looping over all know_nodes
-            for node in sorted(self.known_nodes, key=lambda n: self.node_hashes[n]):
-                node_hash = self.node_hashes[node]
-                if self.node_id < node_hash >= key_hash:
-                    return node
-            # fallback 
-            return self.successor if self.successor != self.address else None
+
+        # Use finger table to find the closest node to the key
+        closest_preceding_node = self.closest_preceding_node(key_hash)
+        if closest_preceding_node:
+            return closest_preceding_node
+
+        # Fallback to successor if no closer node is found
+        return self.successor if self.successor != self.address else None
+
+    def closest_preceding_node(self, key_hash):
+        """ Find the closest preceding node in the finger table for a given key hash. """
+        for i in reversed(range(len(self.finger_table))):
+            finger_node_hash = hash_value(self.finger_table[i])
+            if self.node_id < finger_node_hash < key_hash:
+                return self.finger_table[i]
+        return self.successor
 
     # function to store a key-value pair in the node
     def put(self, key, value):
@@ -143,20 +122,23 @@ class Node:
             print(f"Data stored locally at {self.address} for key_hash: {key_hash}", flush=True)
             return "Stored locally"
 
-        # Single node case
-        if self.successor == self.address:
-            print(f"Stopping recursion at {self.address}. No further forwarding needed.", flush=True)
+        # Find the closest preceding node using the finger table
+        closest_node = self.closest_preceding_node(key_hash)
+
+        # If the closest node is this node itself, store locally
+        if closest_node == self.address:
             self.data_store[key_hash] = value
-            return "Error: Successor is the same as this node, stopping recursion."
+            print(f"Data stored locally at {self.address} as closest node.", flush=True)
+            return "Stored locally"
 
         try:
-            # Forward the PUT request to the successor
-            print(f"Forwarding PUT request to {self.successor} for key {key}", flush=True)
-            response = requests.put(f"http://{self.successor}/storage/{key}", data=value)
-            print(f"Response from successor {self.successor}: {response.text}", flush=True)
+            # Forward the PUT request to the closest node found
+            print(f"Forwarding PUT request to {closest_node} for key {key}", flush=True)
+            response = requests.put(f"http://{closest_node}/storage/{key}", data=value)
+            print(f"Response from closest node {closest_node}: {response.text}", flush=True)
             return response.text
         except Exception as e:
-            print(f"Error forwarding to {self.successor}: {e}", flush=True)
+            print(f"Error forwarding to {closest_node}: {e}", flush=True)
             return str(e)
 
 
@@ -166,42 +148,43 @@ class Node:
         key_hash = hash_value(key)
         
         print(f"Retrieving key: {key}, hash: {key_hash} from node {self.address}", flush=True)
+
+        # Check if the key is stored locally
         if key_hash in self.data_store:
             print(f"Found key {key} in node {self.address}", flush=True)
             return self.data_store[key_hash]
-        
-        # Single node case: return None if not found locally
-        if self.successor == self.address:
-            print(f"Stopping forwarding to {self.successor} in single-node case.", flush=True)
+
+        # Find the closest preceding node using the finger table
+        closest_node = self.closest_preceding_node(key_hash)
+
+        # If the closest node is this node itself, the key isn't found locally
+        if closest_node == self.address:
+            print(f"Key {key} not found in node {self.address}", flush=True)
             return None
-        
+
         try:
-            print(f"Forwarding GET request to {self.successor} for key {key}", flush=True)
-            response = requests.get(f"http://{self.successor}/storage/{key}", timeout=5)
+            # Forward the GET request to the closest node found
+            print(f"Forwarding GET request to {closest_node} for key {key}", flush=True)
+            response = requests.get(f"http://{closest_node}/storage/{key}", timeout=5)
             response.raise_for_status()
-            return response.text  # Use response.text for plain text response
+            return response.text
         except requests.exceptions.Timeout:
-            print(f"Request to {self.successor} timed out.", flush=True)
+            print(f"Request to {closest_node} timed out.", flush=True)
             return None
         except requests.exceptions.RequestException as e:
-            print(f"Error during GET request to {self.successor}: {e}", flush=True)
+            print(f"Error during GET request to {closest_node}: {e}", flush=True)
             return None
-    
+
 
 
 # Flask Routes
 @app.route('/network', methods=['POST'])
 def network_update():
     node_list = request.json['nodes']
-    # Ensure the current node's address is in the list
     if node1.address not in node_list:
         print(f"Adding current node {node1.address} to node_list.", flush=True)
         node_list.append(node1.address)
-    # Log the node list and their hashes for debugging
-    print(f"Received node list: {node_list}", flush=True)
-    hashed_nodes = [hash_value(node) for node in node_list]
-    print(f"Hashes of the received nodes: {hashed_nodes}", flush=True)
-    # Call update successor and predecessor
+    
     node1.update_successor_predecessor(node_list)
     
     return jsonify({'message': 'Updated network'}), 200
@@ -212,6 +195,7 @@ def put_value(key):
     value = request.data.decode('utf-8')
     response = node1.put(key, value)
     return Response(response, content_type='text/plain'), 200  
+
 
 @app.route('/storage/<key>', methods=['GET'])
 def get_value(key):
@@ -242,7 +226,7 @@ def helloworld():
 
 if __name__ == '__main__':
     port = int(sys.argv[1])
-    hostname = socket.gethostname().split('.')[0]   # Get the hostname without the domain (without .ifi.uit.no)
+    hostname = socket.gethostname().split('.')[0]  
     node_address = f"{hostname}:{port}"
     node1 = Node(address=node_address) 
     print(f"Initializing node with address: {node_address}", flush=True)
